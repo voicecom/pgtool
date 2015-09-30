@@ -24,7 +24,7 @@ setup(
     packages=['pgtool'],
     entry_points={'console_scripts': ['pgtool = pgtool.pgtool:main']},
     install_requires=[
-        'psycopg2>=2.4',
+        'psycopg2>=2.4.2',
     ],
     test_suite='tests',
 )
