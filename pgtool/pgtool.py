@@ -33,6 +33,9 @@ def connect(database=MAINT_DBNAME, async=False):
         pg_args['async'] = async
 
     db = psycopg2.connect(**pg_args)
+    # psycopg2 returns only unicode strings
+    psycopg2.extensions.register_type(psycopg2.extensions.UNICODE, db)
+    psycopg2.extensions.register_type(psycopg2.extensions.UNICODEARRAY, db)
     db.autocommit = True
 
     return db
@@ -99,6 +102,12 @@ def pg_kill():
         sys.exit(1)
 
 
+if PY2:
+    def unicode_arg(val):
+        return val.decode(sys.getfilesystemencoding() or 'utf8')
+else:
+    unicode_arg = str
+
 COMMANDS = {
     'cp': pg_copy,
     'mv': pg_move,
@@ -135,13 +144,13 @@ def parse_args(argv=None):
                         help="select the tool/command")
 
     if cmd in ('cp', 'mv'):
-        parser.add_argument('src', metavar="SOURCE",
+        parser.add_argument('src', metavar="SOURCE", type=unicode_arg,
                             help="source database name")
-        parser.add_argument('dest', metavar="DEST",
+        parser.add_argument('dest', metavar="DEST", type=unicode_arg,
                             help="destination database name")
 
     if cmd == 'kill':
-        parser.add_argument('databases', metavar="DBNAME", nargs='+',
+        parser.add_argument('databases', metavar="DBNAME", type=unicode_arg, nargs='+',
                             help="kill connections on this database")
 
     return parser.parse_args(argv)
