@@ -42,9 +42,10 @@ def connect(database=MAINT_DBNAME, async=False):
 
 
 def quote_names(db, names):
+    """psycopg2 doesn't know how to quote identifier names, so we ask the server"""
     c = db.cursor()
-    c.execute("SELECT quote_ident(n) FROM unnest(%s) n", [list(names)])
-    return (name for (name,) in c)  # Unpack rows of one column
+    c.execute("SELECT quote_ident(n) FROM unnest(%s::text[]) n", [list(names)])
+    return [name for (name,) in c]  # Unpack rows of one column
 
 
 def terminate(db, databases):
@@ -78,6 +79,32 @@ def pg_copy():
     sql = "CREATE DATABASE %s TEMPLATE %s" % (q_dest, q_src)
     log.info("SQL: %s", sql)
     c.execute(sql)
+
+    # Copy database and role settings
+    # XXX PostgreSQL 8.4 and older use a different catalog table?
+    c.execute("""\
+    SELECT r.rolname, unnest(setconfig)
+    FROM pg_db_role_setting
+        JOIN pg_database d ON (d.oid=setdatabase)
+        LEFT JOIN pg_roles r ON (r.oid=setrole)
+    WHERE datname=%s
+    """, [args.src])
+    for role, setting in c.fetchall():
+        key, value = setting.split('=', 1)
+        q_role, q_key = quote_names(db, (role, key))
+
+        # See pg_dumpall.c makeAlterConfigCommand: Some GUC variable names are 'LIST' type and hence must not be quoted.
+        if key not in ('DateStyle', 'search_path'):
+            # noinspection PyArgumentList
+            value = psycopg2.extensions.adapt(value).getquoted()
+
+        if role:
+            sql = "ALTER ROLE %s IN DATABASE %s SET %s=%s" % (q_role, q_dest, q_key, value)
+        else:
+            sql = "ALTER DATABASE %s SET %s=%s" % (q_dest, key, value)
+
+        log.info("SQL: %s", sql)
+        c.execute(sql)
 
 
 def pg_move():
