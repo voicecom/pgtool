@@ -11,14 +11,19 @@ import psycopg2
 
 # Globals
 MAINT_DBNAME = 'postgres'  # FIXME: hardcoded
+APPNAME = "PGtool"
 log = logging.getLogger('pgtool')
 PY2 = sys.version_info[0] <= 2
 args = None
 
 
 def connect(database=MAINT_DBNAME, async=False):
+    appname = APPNAME
+    if args and args.cmd:
+        appname += " " + args.cmd
     pg_args = {
-        'database': database
+        'database': database,
+        'application_name': appname,
     }
     if args.host:
         pg_args['host'] = args.host
