@@ -49,9 +49,19 @@ def pg_copy():
     c.execute(sql)
 
 
+def pg_move():
+    db = connect()
+    q_src, q_dest = quote_names(db, (args.src, args.dest))
+
+    c = db.cursor()
+    sql = "ALTER DATABASE %s RENAME TO %s" % (q_src, q_dest)
+    log.info("SQL: %s", sql)
+    c.execute(sql)
+
+
 COMMANDS = {
     'cp': pg_copy,
-    # 'mv': pg_move,
+    'mv': pg_move,
     # 'kill': pg_kill,
 }
 
@@ -81,7 +91,7 @@ def parse_args(argv=None):
     parser.add_argument('cmd', metavar=cmd or "COMMAND", choices=COMMANDS.keys(),  # XXX Sort of a hack
                         help="select the tool/command")
 
-    if cmd == 'cp':
+    if cmd in ('cp', 'mv'):
         parser.add_argument('src', metavar="SOURCE",
                             help="source database name")
         parser.add_argument('dest', metavar="DEST",
