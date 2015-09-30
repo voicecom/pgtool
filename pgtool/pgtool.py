@@ -66,6 +66,9 @@ def terminate(db, databases):
 
 def pg_copy():
     db = connect()
+    if args.force:
+        terminate(db, [args.src, args.dest])
+
     q_src, q_dest = quote_names(db, (args.src, args.dest))
 
     c = db.cursor()
@@ -76,6 +79,9 @@ def pg_copy():
 
 def pg_move():
     db = connect()
+    if args.force:
+        terminate(db, [args.src, args.dest])
+
     q_src, q_dest = quote_names(db, (args.src, args.dest))
 
     c = db.cursor()
@@ -118,6 +124,9 @@ def parse_args(argv=None):
     parser.add_argument("-q", "--quiet",
                         action='store_true', dest='quiet', default=False,
                         help="silence information messages")
+    parser.add_argument("-f", "--force",
+                        action='store_true', dest='force', default=False,
+                        help="kill connections automatically if they prevent a command from executing")
     parser.add_argument("--host", metavar="HOST",
                         help="hostname of database server")
     parser.add_argument("-p", "--port", metavar="PORT", type=int,
