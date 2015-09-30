@@ -39,6 +39,26 @@ def quote_names(db, names):
     return (name for (name,) in c)  # Unpack rows of one column
 
 
+def terminate(db, databases):
+    c = db.cursor()
+    c.execute("""\
+    SELECT pg_terminate_backend(pid), application_name, usename, client_addr FROM pg_stat_activity
+        WHERE datname = ANY(%s) AND pid != pg_backend_pid()
+    """, [databases])
+
+    count = 0
+    for term, app, user, addr in c:
+        log.info("%s %s by %s@%s",
+                 "Killed" if term else "Cannot kill",
+                 app if app else "(unknown)", user, addr)
+        if term:
+            count += 1
+
+    if count:
+        log.warn("Killed %d connection(s)", count)
+    return count
+
+
 def pg_copy():
     db = connect()
     q_src, q_dest = quote_names(db, (args.src, args.dest))
@@ -59,10 +79,19 @@ def pg_move():
     c.execute(sql)
 
 
+def pg_kill():
+    db = connect()
+    count = terminate(db, args.databases)
+    if count == 0:
+        log.error("No connections could be killed")
+        # Return status 1, like killall
+        sys.exit(1)
+
+
 COMMANDS = {
     'cp': pg_copy,
     'mv': pg_move,
-    # 'kill': pg_kill,
+    'kill': pg_kill,
 }
 
 
@@ -96,6 +125,10 @@ def parse_args(argv=None):
                             help="source database name")
         parser.add_argument('dest', metavar="DEST",
                             help="destination database name")
+
+    if cmd == 'kill':
+        parser.add_argument('databases', metavar="DBNAME", nargs='+',
+                            help="kill connections on this database")
 
     return parser.parse_args(argv)
 
