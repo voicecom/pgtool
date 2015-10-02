@@ -44,15 +44,15 @@ def connect(database=MAINT_DBNAME, async=False):
 def quote_names(db, names):
     """psycopg2 doesn't know how to quote identifier names, so we ask the server"""
     c = db.cursor()
-    c.execute("SELECT quote_ident(n) FROM unnest(%s::text[]) n", [list(names)])
+    c.execute("SELECT pg_catalog.quote_ident(n) FROM pg_catalog.unnest(%s::text[]) n", [list(names)])
     return [name for (name,) in c]  # Unpack rows of one column
 
 
 def terminate(db, databases):
     c = db.cursor()
     c.execute("""\
-    SELECT pg_terminate_backend(pid), application_name, usename, client_addr FROM pg_stat_activity
-        WHERE datname = ANY(%s) AND pid != pg_backend_pid()
+    SELECT pg_catalog.pg_terminate_backend(pid), application_name, usename, client_addr FROM pg_catalog.pg_stat_activity
+        WHERE datname = ANY(%s) AND pid != pg_catalog.pg_backend_pid()
     """, [databases])
 
     count = 0
@@ -83,10 +83,10 @@ def pg_copy():
     # Copy database and role settings
     # XXX PostgreSQL 8.4 and older use a different catalog table?
     c.execute("""\
-    SELECT r.rolname, unnest(setconfig)
-    FROM pg_db_role_setting
-        JOIN pg_database d ON (d.oid=setdatabase)
-        LEFT JOIN pg_roles r ON (r.oid=setrole)
+    SELECT r.rolname, pg_catalog.unnest(setconfig)
+    FROM pg_catalog.pg_db_role_setting
+        JOIN pg_catalog.pg_database d ON (d.oid=setdatabase)
+        LEFT JOIN pg_catalog.pg_roles r ON (r.oid=setrole)
     WHERE datname=%s
     """, [args.src])
     for role, setting in c.fetchall():
