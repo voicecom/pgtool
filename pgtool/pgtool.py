@@ -8,6 +8,7 @@ import logging
 from argparse import ArgumentParser
 
 import psycopg2
+import psycopg2.errorcodes
 
 # Globals
 MAINT_DBNAME = 'postgres'  # FIXME: hardcoded
@@ -81,10 +82,22 @@ def pg_copy(db, src, dest):
     q_src, q_dest = quote_names(db, (src, dest))
 
     c = db.cursor()
-    # TODO: error handling; DROP on exception
     sql = "CREATE DATABASE %s TEMPLATE %s" % (q_dest, q_src)
     log.info("SQL: %s", sql)
-    c.execute(sql)
+    try:
+        c.execute(sql)
+    # BaseException also includes KeyboardInterrupt, Exception doesn't
+    except BaseException as err:
+        # Just in case, so we don't drop someone else's database
+        if getattr(err, 'pgcode', None) != psycopg2.errorcodes.DUPLICATE_DATABASE:
+            sql = "DROP DATABASE IF EXISTS %s" % q_dest
+            log.info("SQL: %s", sql)
+            # noinspection PyBroadException
+            try:
+                c.execute(sql)
+            except Exception as err:
+                log.error("Error executing DROP: %s", err)
+        raise
 
     # Copy database and role settings
     # XXX PostgreSQL 8.4 and older use a different catalog table?
