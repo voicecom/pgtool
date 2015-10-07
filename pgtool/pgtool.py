@@ -116,7 +116,8 @@ def pg_copy(db, src, dest):
     # BaseException also includes KeyboardInterrupt, Exception doesn't
     except BaseException as err:
         # Just in case, so we don't drop someone else's database
-        if getattr(err, 'pgcode', None) != psycopg2.errorcodes.DUPLICATE_DATABASE:
+        if getattr(err, 'pgcode', None) not in (psycopg2.errorcodes.DUPLICATE_DATABASE,
+                                                psycopg2.errorcodes.UNIQUE_VIOLATION):
             sql = "DROP DATABASE IF EXISTS %s" % q_dest
             log.info("SQL: %s", sql)
             # noinspection PyBroadException
