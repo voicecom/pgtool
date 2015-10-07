@@ -11,11 +11,21 @@ import psycopg2
 import psycopg2.errorcodes
 
 # Globals
+import time
+
 MAINT_DBNAME = 'postgres'  # FIXME: hardcoded
 APPNAME = "PGtool"
+MAX_IDENTIFIER_LEN = 63  # http://www.postgresql.org/docs/current/static/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS
 log = logging.getLogger('pgtool')
 PY2 = sys.version_info[0] <= 2
 args = None
+
+
+# Utilities
+class Abort(Exception):
+    """Class for fatal errors reported to the user."""
+    # TODO: Proper error handling/reporting
+    pass
 
 
 def connect(database=MAINT_DBNAME, async=False):
@@ -73,6 +83,23 @@ def db_exists(db, dbname):
     c = db.cursor()
     c.execute("SELECT TRUE FROM pg_catalog.pg_database WHERE datname=%s", [dbname])
     return c.rowcount > 0
+
+
+def generate_alt_dbname(db, basename, alt='tmp'):
+    fail = []
+    # Try 5 times...
+    for nr in ('', '_1', '_2', '_3', '_4'):
+        extension = '_%s_%s%s' % (alt, time.strftime('%Y%m%d'), nr)
+        # Truncate basename if necessary to fit into PostgreSQL's 63-byte limit
+        # XXX doesn't truncate unicode names properly
+        name = basename[:MAX_IDENTIFIER_LEN - len(extension)] + extension
+        assert len(name) <= MAX_IDENTIFIER_LEN
+
+        if not db_exists(db, name):
+            return name
+        fail.append(name)
+
+    raise Abort("Cannot generate unique database name; tried: %s" % ", ".join(fail))
 
 
 def pg_copy(db, src, dest):
@@ -140,7 +167,7 @@ def pg_move(db, src, dest):
 
 def pg_move_rename(db, src, dest):
     if args.force and db_exists(db, dest):
-        backup_db = dest + '_old'
+        backup_db = generate_alt_dbname(db, dest, 'old')
         pg_move(db, dest, backup_db)
 
     pg_move(db, src, dest)
@@ -150,8 +177,7 @@ def cmd_copy():
     db = connect()
 
     if args.force and db_exists(db, args.dest):
-        # TODO: generate unique name
-        tmp_db = args.dest + '_tmp'
+        tmp_db = generate_alt_dbname(db, args.dest, 'tmp')
         pg_copy(db, args.src, tmp_db)
 
         pg_move_rename(db, tmp_db, args.dest)
