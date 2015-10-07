@@ -68,14 +68,20 @@ def terminate(db, databases):
     return count
 
 
-def pg_copy():
-    db = connect()
-    if args.force:
-        terminate(db, [args.src, args.dest])
+def db_exists(db, dbname):
+    c = db.cursor()
+    c.execute("SELECT TRUE FROM pg_catalog.pg_database WHERE datname=%s", [dbname])
+    return c.rowcount > 0
 
-    q_src, q_dest = quote_names(db, (args.src, args.dest))
+
+def pg_copy(db, src, dest):
+    if args.force:
+        terminate(db, [src, dest])
+
+    q_src, q_dest = quote_names(db, (src, dest))
 
     c = db.cursor()
+    # TODO: error handling; DROP on exception
     sql = "CREATE DATABASE %s TEMPLATE %s" % (q_dest, q_src)
     log.info("SQL: %s", sql)
     c.execute(sql)
@@ -88,7 +94,7 @@ def pg_copy():
         JOIN pg_catalog.pg_database d ON (d.oid=setdatabase)
         LEFT JOIN pg_catalog.pg_roles r ON (r.oid=setrole)
     WHERE datname=%s
-    """, [args.src])
+    """, [src])
     for role, setting in c.fetchall():
         key, value = setting.split('=', 1)
         q_role, q_key = quote_names(db, (role, key))
@@ -107,12 +113,11 @@ def pg_copy():
         c.execute(sql)
 
 
-def pg_move():
-    db = connect()
+def pg_move(db, src, dest):
     if args.force:
-        terminate(db, [args.src, args.dest])
+        terminate(db, [src, dest])
 
-    q_src, q_dest = quote_names(db, (args.src, args.dest))
+    q_src, q_dest = quote_names(db, (src, dest))
 
     c = db.cursor()
     sql = "ALTER DATABASE %s RENAME TO %s" % (q_src, q_dest)
@@ -120,7 +125,36 @@ def pg_move():
     c.execute(sql)
 
 
-def pg_kill():
+def pg_move_rename(db, src, dest):
+    if args.force and db_exists(db, dest):
+        backup_db = dest + '_old'
+        pg_move(db, dest, backup_db)
+
+    pg_move(db, src, dest)
+
+
+def cmd_copy():
+    db = connect()
+
+    if args.force and db_exists(db, args.dest):
+        # TODO: generate unique name
+        tmp_db = args.dest + '_tmp'
+        pg_copy(db, args.src, tmp_db)
+
+        pg_move_rename(db, tmp_db, args.dest)
+
+    else:
+        pg_copy(db, args.src, args.dest)
+
+
+def cmd_move(db=None):
+    if db is None:
+        db = connect()
+
+    pg_move_rename(db, args.src, args.dest)
+
+
+def cmd_kill():
     db = connect()
     count = terminate(db, args.databases)
     if count == 0:
@@ -136,9 +170,9 @@ else:
     unicode_arg = str
 
 COMMANDS = {
-    'cp': pg_copy,
-    'mv': pg_move,
-    'kill': pg_kill,
+    'cp': cmd_copy,
+    'mv': cmd_move,
+    'kill': cmd_kill,
 }
 
 
@@ -162,7 +196,8 @@ def parse_args(argv=None):
                         help="silence information messages")
     parser.add_argument("-f", "--force",
                         action='store_true', dest='force', default=False,
-                        help="kill connections automatically if they prevent a command from executing")
+                        help="Kill connections automatically if they prevent a command from executing. "
+                             "Rename existing databases that are in the way.")
     parser.add_argument("--host", metavar="HOST",
                         help="hostname of database server")
     parser.add_argument("-p", "--port", metavar="PORT", type=int,
