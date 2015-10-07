@@ -165,10 +165,24 @@ def pg_move(db, src, dest):
     c.execute(sql)
 
 
-def pg_move_rename(db, src, dest):
+def pg_drop(db, name):
+    if args.force:
+        terminate(db, [name])
+
+    c = db.cursor()
+    q_name = quote_names(db, (name,))[0]
+    sql = "DROP DATABASE IF EXISTS %s" % q_name
+    log.info("SQL: %s", sql)
+    c.execute(sql)
+
+
+def pg_move_extended(db, src, dest):
     if args.force and db_exists(db, dest):
-        backup_db = generate_alt_dbname(db, dest, 'old')
-        pg_move(db, dest, backup_db)
+        if args.no_backup:
+            pg_drop(db, dest)
+        else:
+            backup_db = generate_alt_dbname(db, dest, 'old')
+            pg_move(db, dest, backup_db)
 
     pg_move(db, src, dest)
 
@@ -180,7 +194,7 @@ def cmd_copy():
         tmp_db = generate_alt_dbname(db, args.dest, 'tmp')
         pg_copy(db, args.src, tmp_db)
 
-        pg_move_rename(db, tmp_db, args.dest)
+        pg_move_extended(db, tmp_db, args.dest)
 
     else:
         pg_copy(db, args.src, args.dest)
@@ -190,7 +204,7 @@ def cmd_move(db=None):
     if db is None:
         db = connect()
 
-    pg_move_rename(db, args.src, args.dest)
+    pg_move_extended(db, args.src, args.dest)
 
 
 def cmd_kill():
@@ -249,6 +263,9 @@ def parse_args(argv=None):
                             help="source database name")
         parser.add_argument('dest', metavar="DEST", type=unicode_arg,
                             help="destination database name")
+        parser.add_argument("--no-backup",
+                            action='store_true', dest='no_backup', default=False,
+                            help="When destination already exists, drop it instead of renaming (use with --force)")
 
     if cmd == 'kill':
         parser.add_argument('databases', metavar="DBNAME", type=unicode_arg, nargs='+',
