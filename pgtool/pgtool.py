@@ -3,8 +3,9 @@
 
 from __future__ import unicode_literals
 
-import sys
 import logging
+import re
+import sys
 from argparse import ArgumentParser
 
 import psycopg2
@@ -33,9 +34,10 @@ def connect(database=MAINT_DBNAME, async=False):
     if args and args.cmd:
         appname += " " + args.cmd
     pg_args = {
-        'database': database,
         'application_name': appname,
     }
+    if database:
+        pg_args['database'] = database
     if args.host:
         pg_args['host'] = args.host
     if args.port is not None:
@@ -188,6 +190,62 @@ def pg_move_extended(db, src, dest):
     pg_move(db, src, dest)
 
 
+pg_indexdef_re = r"^(CREATE.+) ([^ ]+|\".+\") ON (.+)$"
+
+
+def pg_reindex(db, idx):
+    """Uses CREATE INDEX CONCURRENTLY and tries to swap the index for original without disturbing running queries."""
+    # This is some hairy code still, but it works :)
+    c = db.cursor()
+
+    # XXX regclass case folding is inconsistent with other PGtool commands, but we can live with it for now.
+    c.execute("""\
+    SELECT nspname, relname, pg_catalog.pg_get_indexdef(c.oid, 0, true)
+    FROM pg_catalog.pg_class c
+        JOIN pg_catalog.pg_namespace ns ON (c.relnamespace=ns.oid)
+    WHERE c.oid=%s::pg_catalog.regclass
+    """, [idx])
+    assert c.rowcount == 1  # Otherwise count==0, regclass should fail anyway
+    schema, name, stmt = c.fetchone()
+
+    # TODO Generate unique tmp name or drop previous one when safe?
+    tmpname = 'tmp_' + name
+    q_schema, q_name, q_tmpname = quote_names(db, [schema, name, tmpname])
+
+    # FIXME Parsing not entirely SQL injection-safe.
+    match = re.match(pg_indexdef_re, stmt)
+    assert match, "Cannot parse indexdef statement: %s" % stmt
+
+    # TODO Error recovery, drop index if swapping fails.
+    sql = "%s CONCURRENTLY %s ON %s" % (match.group(1), q_tmpname, match.group(3))
+    log.info("SQL: %s", sql)
+    c.execute(sql)
+
+    log.info("Temp index created, trying to swap without interrupting other queries...")
+    c.execute("SET lock_timeout='1s'")
+    # Retry loop. XXX This may never complete on very busy systems?
+    while True:
+        try:
+            c.execute("BEGIN")
+            sql = "DROP INDEX %s.%s" % (q_schema, q_name)
+            log.info("SQL: %s", sql)
+            c.execute(sql)
+
+            sql = "ALTER INDEX %s.%s RENAME TO %s" % (q_schema, q_tmpname, q_name)
+            log.info("SQL: %s", sql)
+            c.execute(sql)
+
+        except psycopg2.DatabaseError as err:
+            if err.pgcode == psycopg2.errorcodes.LOCK_NOT_AVAILABLE:
+                c.execute("ROLLBACK")
+                time.sleep(1)
+                continue
+            raise
+
+        c.execute("COMMIT")  # XXX Can't use db.commit(), why?
+        break
+
+
 def cmd_copy():
     db = connect()
 
@@ -217,6 +275,12 @@ def cmd_kill():
         sys.exit(1)
 
 
+def cmd_reindex():
+    db = connect(args.database)
+    for idx in args.indexes:
+        pg_reindex(db, idx)
+
+
 if PY2:
     def unicode_arg(val):
         return val.decode(sys.getfilesystemencoding() or 'utf8')
@@ -227,6 +291,7 @@ COMMANDS = {
     'cp': cmd_copy,
     'mv': cmd_move,
     'kill': cmd_kill,
+    'reindex': cmd_reindex,
 }
 
 
@@ -268,9 +333,15 @@ def parse_args(argv=None):
                             action='store_true', dest='no_backup', default=False,
                             help="When destination already exists, drop it instead of renaming (use with --force)")
 
-    if cmd == 'kill':
+    elif cmd == 'kill':
         parser.add_argument('databases', metavar="DBNAME", type=unicode_arg, nargs='+',
                             help="kill connections on this database")
+
+    elif cmd == 'reindex':
+        parser.add_argument('-d', '--database', metavar="DB", type=unicode_arg,
+                            help="apply reindex in this database")
+        parser.add_argument('indexes', metavar="IDXNAME", type=unicode_arg, nargs='+',
+                            help="reindex these indexes")
 
     return parser.parse_args(argv)
 
