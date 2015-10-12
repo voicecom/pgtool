@@ -72,7 +72,8 @@ def terminate(db, databases):
     for term, app, user, addr in c:
         log.info("%s %s by %s@%s",
                  "Killed" if term else "Cannot kill",
-                 app if app else "(unknown)", user, addr)
+                 app if app else "(unknown)", user,
+                 addr if addr else "[local]")
         if term:
             count += 1
 
