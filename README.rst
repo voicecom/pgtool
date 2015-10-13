@@ -7,9 +7,32 @@ PGtool
    :alt: Travis CI
    :target: http://travis-ci.org/voicecom/pgtool
 
-Command-line tool for interacting with PostgreSQL databases.
+PGtool is a command-line tool designed to simplify some common maintenance tasks on PostgreSQL databases. It works with
+Python 2.7 and 3.3+ using the psycopg2 driver.
 
-TODO: usage etc
+Available commands:
+
+cp SOURCE DEST
+    Uses CREATE DATABASE ... TEMPLATE to create a duplicate of a database. Also copies over database-specific
+    settings.
+
+    When used with --force, an existing database with the same name as DEST is replaced, the original is renamed out of
+    place in the form DEST_old_YYYYMMDD (unless --no-backup is specified).
+
+mv SOURCE DEST
+    Rename a database within a server.
+
+    When used with --force, an existing database with the same name as DEST is replaced, the original is renamed out of
+    place in the form DEST_old_YYYYMMDD (unless --no-backup is specified).
+
+kill DBNAME [DBNAME ...]
+    Kills all active connections to the specified database(s).
+
+reindex IDXNAME [IDXNAME ...]
+    Uses CREATE INDEX CONCURRENTLY to create a duplicate index, then tries to swap the new index for the original.
+
+    The index swap is done using a short lock timeout to prevent it from interfering with running queries. Retries until
+    the rename succeeds.
 
 Resources
 ---------
