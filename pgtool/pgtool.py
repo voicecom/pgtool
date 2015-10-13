@@ -195,7 +195,6 @@ pg_indexdef_re = r"^(CREATE.+) ([^ ]+|\".+\") ON (.+)$"
 
 
 def pg_reindex(db, idx):
-    """Uses CREATE INDEX CONCURRENTLY and tries to swap the index for original without disturbing running queries."""
     # This is some hairy code still, but it works :)
     c = db.cursor()
 
@@ -248,6 +247,12 @@ def pg_reindex(db, idx):
 
 
 def cmd_copy():
+    """Uses CREATE DATABASE ... TEMPLATE to create a duplicate of a database. Also copies over database-specific
+    settings.
+
+    When used with --force, an existing database with the same name as DEST is replaced, the original is renamed out of
+    place in the form DEST_old_YYYYMMDD (unless --no-backup is specified).
+    """
     db = connect()
 
     if args.force and db_exists(db, args.dest):
@@ -261,6 +266,11 @@ def cmd_copy():
 
 
 def cmd_move(db=None):
+    """Rename a database within a server.
+
+    When used with --force, an existing database with the same name as DEST is replaced, the original is renamed out of
+    place in the form DEST_old_YYYYMMDD (unless --no-backup is specified).
+    """
     if db is None:
         db = connect()
 
@@ -268,6 +278,7 @@ def cmd_move(db=None):
 
 
 def cmd_kill():
+    """Kills all active connections to the specified database(s)."""
     db = connect()
     count = terminate(db, args.databases)
     if count == 0:
@@ -277,6 +288,11 @@ def cmd_kill():
 
 
 def cmd_reindex():
+    """Uses CREATE INDEX CONCURRENTLY to create a duplicate index, then tries to swap the new index for the original.
+
+    The index swap is done using a short lock timeout to prevent it from interfering with running queries. Retries until
+    the rename succeeds.
+    """
     db = connect(args.database)
     for idx in args.indexes:
         pg_reindex(db, idx)
@@ -299,52 +315,51 @@ COMMANDS = {
 def parse_args(argv=None):
     """Argument parsing. Keep this together with main()"""
 
-    if argv is None:
-        argv = sys.argv[1:]
-
-    # XXX Maybe there's a cleaner solution for this?
-    cmd = [a for a in argv if not a.startswith(str('-'))]
-    if len(cmd) >= 1:
-        cmd = cmd[0]
-    else:
-        cmd = None
-
     # Generic options
-    parser = ArgumentParser()
-    parser.add_argument("-q", "--quiet",
-                        action='store_true', dest='quiet', default=False,
-                        help="silence information messages")
-    parser.add_argument("-f", "--force",
-                        action='store_true', dest='force', default=False,
-                        help="Kill connections automatically if they prevent a command from executing. "
-                             "Rename existing databases that are in the way.")
-    parser.add_argument("--host", metavar="HOST",
-                        help="hostname of database server")
-    parser.add_argument("-p", "--port", metavar="PORT", type=int,
-                        help="port number of database server")
-    parser.add_argument('cmd', metavar=cmd or "COMMAND", choices=COMMANDS.keys(),  # XXX Sort of a hack
-                        help="select the tool/command")
+    p_generic = ArgumentParser(add_help=False)
+    generic = p_generic.add_argument_group("generic arguments")
+    generic.add_argument("-q", "--quiet",
+                         action='store_true', dest='quiet', default=False,
+                         help="silence information messages")
+    generic.add_argument("-f", "--force",
+                         action='store_true', dest='force', default=False,
+                         help="Kill connections automatically if they prevent a command from executing. "
+                              "Rename existing databases that are in the way.")
+    generic.add_argument("--host", metavar="HOST",
+                         help="hostname of database server")
+    generic.add_argument("-p", "--port", metavar="PORT", type=int,
+                         help="port number of database server")
 
-    if cmd in ('cp', 'mv'):
-        parser.add_argument('src', metavar="SOURCE", type=unicode_arg,
-                            help="source database name")
-        parser.add_argument('dest', metavar="DEST", type=unicode_arg,
-                            help="destination database name")
-        parser.add_argument("--no-backup",
-                            action='store_true', dest='no_backup', default=False,
-                            help="When destination already exists, drop it instead of renaming (use with --force)")
+    p_main = ArgumentParser()
+    sub = p_main.add_subparsers(metavar="COMMAND", dest='cmd')
 
-    elif cmd == 'kill':
-        parser.add_argument('databases', metavar="DBNAME", type=unicode_arg, nargs='+',
-                            help="kill connections on this database")
+    p_cp = sub.add_parser('cp', parents=[p_generic], description=cmd_copy.__doc__,
+                          help="Create a copy of a database within a server")
+    p_mv = sub.add_parser('mv', parents=[p_generic], description=cmd_move.__doc__,
+                          help="Rename a database within a server")
 
-    elif cmd == 'reindex':
-        parser.add_argument('-d', '--database', metavar="DB", type=unicode_arg,
-                            help="apply reindex in this database")
-        parser.add_argument('indexes', metavar="IDXNAME", type=unicode_arg, nargs='+',
-                            help="reindex these indexes")
+    for p_cmd in (p_cp, p_mv):
+        p_cmd.add_argument('src', metavar="SOURCE", type=unicode_arg,
+                           help="source database name")
+        p_cmd.add_argument('dest', metavar="DEST", type=unicode_arg,
+                           help="destination database name")
+        p_cmd.add_argument("--no-backup",
+                           action='store_true', dest='no_backup', default=False,
+                           help="drop existing DEST database if it exists")
 
-    return parser.parse_args(argv)
+    p_kill = sub.add_parser('kill', parents=[p_generic], description=cmd_kill.__doc__,
+                            help="Terminate active connections to a database")
+    p_kill.add_argument('databases', metavar="DBNAME", type=unicode_arg, nargs='+',
+                        help="kill connections on this database")
+
+    p_reindex = sub.add_parser('reindex', parents=[p_generic], description=cmd_reindex.__doc__,
+                               help="Gracefully recreate an index")
+    p_reindex.add_argument('-d', '--database', metavar="DB", type=unicode_arg,
+                           help="apply reindex in this database")
+    p_reindex.add_argument('indexes', metavar="IDXNAME", type=unicode_arg, nargs='+',
+                           help="reindex these indexes")
+
+    return p_main.parse_args(argv)
 
 
 def main(argv=None):
