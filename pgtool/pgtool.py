@@ -298,12 +298,6 @@ def cmd_reindex():
         pg_reindex(db, idx)
 
 
-if PY2:
-    def unicode_arg(val):
-        return val.decode(sys.getfilesystemencoding() or 'utf8')
-else:
-    unicode_arg = str
-
 COMMANDS = {
     'cp': cmd_copy,
     'mv': cmd_move,
@@ -312,12 +306,26 @@ COMMANDS = {
 }
 
 
-def parse_args(argv=None):
+def dispatch(cmd):
+    if not cmd:
+        raise Abort("Command required")
+
+    tool = COMMANDS[cmd]
+    tool()
+
+
+def make_argparser():
     """Argument parsing. Keep this together with main()"""
 
+    if PY2:
+        def unicode_arg(val):
+            return val.decode(sys.getfilesystemencoding() or 'utf8')
+    else:
+        unicode_arg = str
+
     # Generic options
-    p_generic = ArgumentParser(add_help=False)
-    generic = p_generic.add_argument_group("generic arguments")
+    p_main = ArgumentParser()
+    generic = p_main.add_argument_group("generic arguments")
     generic.add_argument("-q", "--quiet",
                          action='store_true', dest='quiet', default=False,
                          help="silence information messages")
@@ -330,12 +338,11 @@ def parse_args(argv=None):
     generic.add_argument("-p", "--port", metavar="PORT", type=int,
                          help="port number of database server")
 
-    p_main = ArgumentParser()
     sub = p_main.add_subparsers(metavar="COMMAND", dest='cmd')
 
-    p_cp = sub.add_parser('cp', parents=[p_generic], description=cmd_copy.__doc__,
+    p_cp = sub.add_parser('cp', description=cmd_copy.__doc__,
                           help="Create a copy of a database within a server")
-    p_mv = sub.add_parser('mv', parents=[p_generic], description=cmd_move.__doc__,
+    p_mv = sub.add_parser('mv', description=cmd_move.__doc__,
                           help="Rename a database within a server")
 
     for p_cmd in (p_cp, p_mv):
@@ -347,33 +354,33 @@ def parse_args(argv=None):
                            action='store_true', dest='no_backup', default=False,
                            help="drop existing DEST database if it exists")
 
-    p_kill = sub.add_parser('kill', parents=[p_generic], description=cmd_kill.__doc__,
+    p_kill = sub.add_parser('kill', description=cmd_kill.__doc__,
                             help="Terminate active connections to a database")
     p_kill.add_argument('databases', metavar="DBNAME", type=unicode_arg, nargs='+',
                         help="kill connections on this database")
 
-    p_reindex = sub.add_parser('reindex', parents=[p_generic], description=cmd_reindex.__doc__,
+    p_reindex = sub.add_parser('reindex', description=cmd_reindex.__doc__,
                                help="Gracefully recreate an index")
     p_reindex.add_argument('-d', '--database', metavar="DB", type=unicode_arg,
                            help="apply reindex in this database")
     p_reindex.add_argument('indexes', metavar="IDXNAME", type=unicode_arg, nargs='+',
                            help="reindex these indexes")
 
-    return p_main.parse_args(argv)
+    return p_main
 
 
 def main(argv=None):
     global args
 
-    args = parse_args(argv)
+    parser = make_argparser()
+    args = parser.parse_args(argv)
 
     logging.basicConfig(
         level=logging.WARNING if args.quiet else logging.INFO,
         format='%(message)s'
     )
 
-    tool = COMMANDS[args.cmd]
-    tool()
+    dispatch(args.cmd)
 
 
 if __name__ == '__main__':

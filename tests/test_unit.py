@@ -14,7 +14,8 @@ class MicroTest(unittest.TestCase):
         """The environment must contain PG* environment variables to establish a PostgreSQL connection:
         http://www.postgresql.org/docs/current/static/libpq-envars.html
         """
-        pgtool.args = pgtool.parse_args(['kill', 'x'])  # hack :(
+        parser = pgtool.make_argparser()
+        pgtool.args = parser.parse_args(['kill', 'x'])  # hack :(
         self.db = pgtool.connect()
 
     def tearDown(self):
