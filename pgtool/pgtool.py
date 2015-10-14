@@ -29,6 +29,11 @@ class Abort(Exception):
     pass
 
 
+class AbortWithHelp(Abort):
+    """Errors that cause --help screen to be printed."""
+    pass
+
+
 def connect(database=MAINT_DBNAME, async=False):
     appname = APPNAME
     if args and args.cmd:
@@ -308,7 +313,8 @@ COMMANDS = {
 
 def dispatch(cmd):
     if not cmd:
-        raise Abort("Command required")
+        # This only works with argparse from Python 3, dunno how to fix it :(
+        raise AbortWithHelp("Command required")
 
     tool = COMMANDS[cmd]
     tool()
@@ -333,6 +339,8 @@ def make_argparser():
                          action='store_true', dest='force', default=False,
                          help="Kill connections automatically if they prevent a command from executing. "
                               "Rename existing databases that are in the way.")
+    generic.add_argument("--traceback", action='store_true', default=False,
+                         help="print traceback when an error occurs")
     generic.add_argument("--host", metavar="HOST",
                          help="hostname of database server")
     generic.add_argument("-p", "--port", metavar="PORT", type=int,
@@ -380,7 +388,23 @@ def main(argv=None):
         format='%(message)s'
     )
 
-    dispatch(args.cmd)
+    try:
+        dispatch(args.cmd)
+    except Abort as err:
+        if args.traceback:
+            raise
+        log.fatal("Fatal: %s", err)
+        if isinstance(err, AbortWithHelp):
+            parser.print_help()
+        sys.exit(1)
+
+    except psycopg2.Error as err:
+        if args.traceback:
+            raise
+        log.fatal(("PostgreSQL: %s" % err).strip())
+        if getattr(err, 'pgcode', None):
+            log.error("Error code: %s", err.pgcode)
+        sys.exit(1)
 
 
 if __name__ == '__main__':
