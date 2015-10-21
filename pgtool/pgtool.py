@@ -196,7 +196,7 @@ def pg_move_extended(db, src, dest):
     pg_move(db, src, dest)
 
 
-pg_indexdef_re = r"^(CREATE.+) ([^ ]+|\".+\") ON (.+)$"
+pg_indexdef_re = r'^(CREATE .*INDEX) ([^ "]+|".+") ON (.+)$'
 
 
 def pg_reindex(db, idx):

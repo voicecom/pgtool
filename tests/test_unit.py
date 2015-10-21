@@ -50,9 +50,14 @@ class MicroTest(unittest.TestCase):
             time.strftime('such a long database name could not possibly exist_tmp_%Y%m%d'))
 
 
-def get_rel_oid(c, relname):
-    c.execute("SELECT %s::regclass::int", [relname])
+def get_single_val(c, sql, vars=None):
+    c.execute(sql, vars)
+    assert c.rowcount == 1
     return c.fetchone()[0]
+
+
+def get_rel_oid(c, relname):
+    return get_single_val(c, "SELECT %s::regclass::int", [relname])
 
 
 class OperationTest(unittest.TestCase):
@@ -81,20 +86,33 @@ class OperationTest(unittest.TestCase):
         # Intentionally don't drop the test schema, so it's easier to inspect failures
         self.db.close()
 
-    def test_reindex(self):
-        """Test a simple reindex operation"""
+    def internal_test_reindex(self, name, sql):
         c = self.db.cursor()
         # Create index
-        c.execute("CREATE INDEX reindex_idx1 ON reindex_tbl(txt)")
-        oid1 = get_rel_oid(c, 'reindex_idx1')
+        c.execute(sql)
+        oid1 = get_rel_oid(c, name)
+        stmt1 = get_single_val(c, "SELECT pg_get_indexdef(%s, 0, false)", [oid1])
 
         # Recreate index
-        pgtool.pg_reindex(self.db, 'reindex_idx1')
-        oid2 = get_rel_oid(c, 'reindex_idx1')
+        pgtool.pg_reindex(self.db, name)
+        oid2 = get_rel_oid(c, name)
+        stmt2 = get_single_val(c, "SELECT pg_get_indexdef(%s, 0, false)", [oid2])
         self.assertTrue(oid2 > 0)
 
         # New oid must be allocated for the new index
         self.assertNotEqual(oid1, oid2)
+        # But index expressions must remain equal
+        self.assertEqual(stmt1, stmt2)
+
+    def test_reindex_simple(self):
+        """Test a simple reindex operation"""
+        self.internal_test_reindex('reindex_idx1', "CREATE INDEX reindex_idx1 ON reindex_tbl(txt)")
+
+    def test_reindex_complex(self):
+        """Test a complex reindex operation"""
+        # Has Unicode, " and space in index name, functional expression, UNIQUE and WHERE predicate
+        self.internal_test_reindex('"reindex_idx3 "" Aaä"', """\
+            CREATE UNIQUE INDEX "reindex_idx3 "" Aaä" ON reindex_tbl(txt, (txt || 'x')) WHERE txt IS NOT NULL""")
 
     def test_reindex_recovery(self):
         """Test error recovery when reindex fails"""
