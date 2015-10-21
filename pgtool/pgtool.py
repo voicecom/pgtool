@@ -221,13 +221,33 @@ def pg_reindex(db, idx):
     match = re.match(pg_indexdef_re, stmt)
     assert match, "Cannot parse indexdef statement: %s" % stmt
 
-    # TODO Error recovery, drop index if swapping fails.
-    sql = "%s CONCURRENTLY %s ON %s" % (match.group(1), q_tmpname, match.group(3))
-    log.info("SQL: %s", sql)
-    c.execute(sql)
+    try:
+        sql = "%s CONCURRENTLY %s ON %s" % (match.group(1), q_tmpname, match.group(3))
+        log.info("SQL: %s", sql)
+        c.execute(sql)
 
+        pg_replace_index(db, q_schema, q_tmpname, q_name)
+
+    # BaseException also includes KeyboardInterrupt, Exception doesn't
+    except BaseException as err:
+        # Just in case, so we don't drop someone else's index
+        if getattr(err, 'pgcode', None) not in (psycopg2.errorcodes.DUPLICATE_TABLE,
+                                                psycopg2.errorcodes.UNIQUE_VIOLATION):
+            sql = "DROP INDEX IF EXISTS %s" % q_tmpname
+            log.info("SQL: %s", sql)
+            # noinspection PyBroadException
+            try:
+                c.execute(sql)
+            except Exception as err:
+                log.error("Error executing DROP: %s", err)
+        raise
+
+
+def pg_replace_index(db, q_schema, q_source, q_name):
     log.info("Temp index created, trying to swap without interrupting other queries...")
+    c = db.cursor()
     c.execute("SET lock_timeout='1s'")
+
     # Retry loop. XXX This may never complete on very busy systems?
     while True:
         try:
@@ -236,7 +256,7 @@ def pg_reindex(db, idx):
             log.info("SQL: %s", sql)
             c.execute(sql)
 
-            sql = "ALTER INDEX %s.%s RENAME TO %s" % (q_schema, q_tmpname, q_name)
+            sql = "ALTER INDEX %s.%s RENAME TO %s" % (q_schema, q_source, q_name)
             log.info("SQL: %s", sql)
             c.execute(sql)
 
