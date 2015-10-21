@@ -114,6 +114,12 @@ class OperationTest(unittest.TestCase):
         self.internal_test_reindex('"reindex_idx3 "" Aaä"', """\
             CREATE UNIQUE INDEX "reindex_idx3 "" Aaä" ON reindex_tbl(txt, (txt || 'x')) WHERE txt IS NOT NULL""")
 
+    def test_reindex_gist(self):
+        """Test reindex of a GiST index"""
+        # TODO: Skip on older PostgreSQL versions... self.skipTest()
+        self.internal_test_reindex('reindex_idx4',
+                                   "CREATE INDEX reindex_idx4 ON reindex_tbl USING gist(('(1,1)'::point))")
+
     def test_reindex_recovery(self):
         """Test error recovery when reindex fails"""
         c = self.db.cursor()
