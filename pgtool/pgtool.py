@@ -66,6 +66,15 @@ def quote_names(db, names):
     return [name for (name,) in c]  # Unpack rows of one column
 
 
+def execute_catch(c, sql, vars=None):
+    """Run a query, but ignore any errors. For error recovery paths where the error handler should not raise another."""
+    try:
+        c.execute(sql, vars)
+    except Exception as err:
+        cmd = sql.split(' ', 1)[0]
+        log.error("Error executing %s: %s", cmd, err)
+
+
 def terminate(db, databases):
     c = db.cursor()
     c.execute("""\
@@ -128,11 +137,7 @@ def pg_copy(db, src, dest):
                                                 psycopg2.errorcodes.UNIQUE_VIOLATION):
             sql = "DROP DATABASE IF EXISTS %s" % q_dest
             log.info("SQL: %s", sql)
-            # noinspection PyBroadException
-            try:
-                c.execute(sql)
-            except Exception as err:
-                log.error("Error executing DROP: %s", err)
+            execute_catch(c, sql)
         raise
 
     # Copy database and role settings
@@ -237,11 +242,7 @@ def pg_reindex(db, idx):
                                                 psycopg2.errorcodes.UNIQUE_VIOLATION):
             sql = "DROP INDEX IF EXISTS %s" % q_tmpname
             log.info("SQL: %s", sql)
-            # noinspection PyBroadException
-            try:
-                c.execute(sql)
-            except Exception as err:
-                log.error("Error executing DROP: %s", err)
+            execute_catch(c, sql)
         raise
 
 
@@ -263,8 +264,8 @@ def pg_replace_index(db, q_schema, q_source, q_name):
             c.execute(sql)
 
         except psycopg2.DatabaseError as err:
+            execute_catch(c, "ROLLBACK")
             if err.pgcode == psycopg2.errorcodes.LOCK_NOT_AVAILABLE:
-                c.execute("ROLLBACK")
                 time.sleep(1)
                 continue
             raise
