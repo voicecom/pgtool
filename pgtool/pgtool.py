@@ -240,6 +240,8 @@ def pg_reindex(db, idx):
         # Just in case, so we don't drop someone else's index
         if getattr(err, 'pgcode', None) not in (psycopg2.errorcodes.DUPLICATE_TABLE,
                                                 psycopg2.errorcodes.UNIQUE_VIOLATION):
+            if isinstance(err, KeyboardInterrupt):
+                log.warn("Interrupted, dropping temporary index...")
             # XXX Why is this necessary? pg_replace_index's ROLLBACK doesn't do the job when ^C'ing the inner DROP INDEX
             # during contention.
             execute_catch(c, "ROLLBACK")
@@ -417,20 +419,21 @@ def main(argv=None):
 
     try:
         dispatch(args.cmd)
-    except Abort as err:
+    except (Abort, psycopg2.Error, KeyboardInterrupt) as err:
         if args.traceback:
             raise
-        log.fatal("Fatal: %s", err)
-        if isinstance(err, AbortWithHelp):
-            parser.print_help()
-        sys.exit(1)
 
-    except psycopg2.Error as err:
-        if args.traceback:
-            raise
-        log.fatal(("PostgreSQL: %s" % err).strip())
-        if getattr(err, 'pgcode', None):
-            log.error("Error code: %s", err.pgcode)
+        if isinstance(err, KeyboardInterrupt):
+            log.warn("Interrupted")
+        elif isinstance(err, psycopg2.Error):
+            log.fatal(("PostgreSQL: %s" % err).strip())
+            if getattr(err, 'pgcode', None):
+                log.error("Error code: %s", err.pgcode)
+        else:
+            log.fatal("Fatal: %s", err)
+            if isinstance(err, AbortWithHelp):
+                parser.print_help()
+
         sys.exit(1)
 
 
