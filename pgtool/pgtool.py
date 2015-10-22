@@ -249,12 +249,12 @@ def pg_reindex(db, idx):
 def pg_replace_index(db, q_schema, q_source, q_name):
     log.info("Temp index created, trying to swap without interrupting other queries...")
     c = db.cursor()
-    c.execute("SET lock_timeout='1s'")
+    timeout_var = 'lock_timeout' if db.server_version >= 90300 else 'statement_timeout'
 
     # Retry loop. XXX This may never complete on very busy systems?
     while True:
         try:
-            c.execute("BEGIN")
+            c.execute("BEGIN; SET LOCAL %s='1s'" % timeout_var)
             sql = "DROP INDEX %s.%s" % (q_schema, q_name)
             log.info("SQL: %s", sql)
             c.execute(sql)
@@ -265,7 +265,7 @@ def pg_replace_index(db, q_schema, q_source, q_name):
 
         except psycopg2.DatabaseError as err:
             execute_catch(c, "ROLLBACK")
-            if err.pgcode == psycopg2.errorcodes.LOCK_NOT_AVAILABLE:
+            if err.pgcode in (psycopg2.errorcodes.LOCK_NOT_AVAILABLE, psycopg2.errorcodes.QUERY_CANCELED):
                 time.sleep(1)
                 continue
             raise
