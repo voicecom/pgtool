@@ -196,7 +196,10 @@ def pg_move_extended(db, src, dest):
     pg_move(db, src, dest)
 
 
-pg_indexdef_re = r'^(CREATE .*INDEX) ([^ "]+|".+") ON (.+)$'
+#: Parses the output of pg_get_indexdef()
+# This regexp *SHOULD* be SQL injection-safe, but still not 100% certain, it's tricky.
+# Uses negative lookahead/lookbehind to avoid mistaking escaped "" for a "
+pg_indexdef_re = r'^(CREATE .*INDEX) ([^ "]+|"(?!").+(?<!")") ON (.+)$'
 
 
 def pg_reindex(db, idx):
@@ -217,7 +220,6 @@ def pg_reindex(db, idx):
     tmpname = 'tmp_' + name
     q_schema, q_name, q_tmpname = quote_names(db, [schema, name, tmpname])
 
-    # FIXME Parsing not entirely SQL injection-safe.
     match = re.match(pg_indexdef_re, stmt)
     assert match, "Cannot parse indexdef statement: %s" % stmt
 

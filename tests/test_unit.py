@@ -110,9 +110,11 @@ class OperationTest(unittest.TestCase):
 
     def test_reindex_complex(self):
         """Test a complex reindex operation"""
-        # Has Unicode, " and space in index name, functional expression, UNIQUE and WHERE predicate
-        self.internal_test_reindex('"reindex_idx3 "" Aaä"', """\
-            CREATE UNIQUE INDEX "reindex_idx3 "" Aaä" ON reindex_tbl(txt, (txt || 'x')) WHERE txt IS NOT NULL""")
+        # Deliberately constructed to confuse the parser of pg_get_indexdef() output
+        q_name = '"reindex_idx3 INDEX ""x"" ON Aaä"'
+        # Tests recreation with a functional expression, UNIQUE and WHERE predicate
+        sql = "CREATE UNIQUE INDEX %s ON reindex_tbl(txt, (txt || 'x')) WHERE txt IS NOT NULL" % q_name
+        self.internal_test_reindex(q_name, sql)
 
     def test_reindex_gist(self):
         """Test reindex of a GiST index"""
