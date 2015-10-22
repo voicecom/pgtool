@@ -240,7 +240,10 @@ def pg_reindex(db, idx):
         # Just in case, so we don't drop someone else's index
         if getattr(err, 'pgcode', None) not in (psycopg2.errorcodes.DUPLICATE_TABLE,
                                                 psycopg2.errorcodes.UNIQUE_VIOLATION):
-            sql = "DROP INDEX IF EXISTS %s" % q_tmpname
+            # XXX Why is this necessary? pg_replace_index's ROLLBACK doesn't do the job when ^C'ing the inner DROP INDEX
+            # during contention.
+            execute_catch(c, "ROLLBACK")
+            sql = "DROP INDEX IF EXISTS %s.%s" % (q_schema, q_tmpname)
             log.info("SQL: %s", sql)
             execute_catch(c, sql)
         raise
@@ -263,9 +266,10 @@ def pg_replace_index(db, q_schema, q_source, q_name):
             log.info("SQL: %s", sql)
             c.execute(sql)
 
-        except psycopg2.DatabaseError as err:
+        except BaseException as err:
             execute_catch(c, "ROLLBACK")
-            if err.pgcode in (psycopg2.errorcodes.LOCK_NOT_AVAILABLE, psycopg2.errorcodes.QUERY_CANCELED):
+            if getattr(err, 'pgcode', None) in (psycopg2.errorcodes.LOCK_NOT_AVAILABLE,
+                                                psycopg2.errorcodes.QUERY_CANCELED):
                 time.sleep(1)
                 continue
             raise
