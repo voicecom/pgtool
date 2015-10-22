@@ -61,15 +61,17 @@ def get_rel_oid(c, relname):
 
 
 class OperationTest(unittest.TestCase):
-    def setUp(self):
+    @classmethod
+    def setUpClass(cls):
         """The environment must contain PG* environment variables to establish a PostgreSQL connection:
         http://www.postgresql.org/docs/current/static/libpq-envars.html
         """
         parser = pgtool.make_argparser()
         pgtool.args = parser.parse_args(['kill', 'x'])  # hack to fill out args
-        self.db = pgtool.connect(None)
+        cls.db = pgtool.connect(None)
 
-        c = self.db.cursor()
+        c = cls.db.cursor()
+        # XXX ideally this setup should be done once globally, not for each test class
         # language=SQL
         c.execute("""\
         -- Schema
@@ -82,9 +84,18 @@ class OperationTest(unittest.TestCase):
         INSERT INTO reindex_tbl VALUES ('a');
         """)
 
-    def tearDown(self):
+    @classmethod
+    def tearDownClass(cls):
         # Intentionally don't drop the test schema, so it's easier to inspect failures
-        self.db.close()
+        # noinspection PyUnresolvedReferences
+        cls.db.close()
+
+    def setUp(self):
+        """Reset server-side state of the connection"""
+        c = self.db.cursor()
+        c.execute("ROLLBACK")
+        c.execute("DISCARD ALL")  # cannot be executed from a multi-command string
+        c.execute("SET search_path=pgtool_test")
 
     def internal_test_reindex(self, name, sql):
         c = self.db.cursor()
