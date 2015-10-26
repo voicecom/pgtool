@@ -1,0 +1,20 @@
+sudo: false
+language: python
+# addons.postgresql section: does not support multiple values :(
+addons:
+    postgresql: "9.3"
+python:
+    - "2.7"
+    - "3.4"
+    - "3.5"
+    # - "pypy"  # FIXME broken with PyPy, need to use psycopg2ct?
+cache:
+    directories:
+        - $PWD/wheelhouse  # cache the dependencies
+env:
+    global:
+        - export PIP_FIND_LINKS=$PWD/wheelhouse
+install:
+  - pip wheel -r requirements.txt
+  - pip install -r requirements.txt
+script: python setup.py test
