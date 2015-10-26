@@ -10,6 +10,10 @@ PGtool
 PGtool is a command-line tool designed to simplify some common maintenance tasks on PostgreSQL databases. It works with
 Python 2.7 and 3.3+ using the psycopg2 driver.
 
+The easiest way to install it is using pip::
+
+    pip install pgtool
+
 Available commands:
 
 cp SOURCE DEST
