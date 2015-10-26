@@ -13,7 +13,7 @@ Python 2.7 and 3.3+ using the psycopg2 driver.
 Available commands:
 
 cp SOURCE DEST
-    Uses CREATE DATABASE ... TEMPLATE to create a duplicate of a database. Also copies over database-specific
+    Uses CREATE DATABASE ... TEMPLATE to create a duplicate of a database. Additionally copies over database-specific
     settings.
 
     When used with --force, an existing database with the same name as DEST is replaced, the original is renamed out of
@@ -43,9 +43,9 @@ Resources
 Changelog
 ---------
 
-UNRELEASED (YYYY-MM-DD)
+0.0.1 (2015-10-26)
 
-* Initial public release
+* Initial public release, commands: 'cp', 'mv', 'kill' & 'reindex'
 
 Contributing
 ------------
