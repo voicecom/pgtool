@@ -1,11 +1,11 @@
 PGtool
 ======
 .. image:: https://badge.fury.io/py/pgtool.svg
-   :target: http://badge.fury.io/py/pgtool
+   :target: https://badge.fury.io/py/pgtool
 
 .. image:: https://travis-ci.org/voicecom/pgtool.svg?branch=master
    :alt: Travis CI
-   :target: http://travis-ci.org/voicecom/pgtool
+   :target: https://travis-ci.org/voicecom/pgtool
 
 PGtool is a command-line tool designed to simplify some common maintenance tasks on PostgreSQL databases. It works with
 Python 2.7 and 3.3+ using the psycopg2 driver.
@@ -43,6 +43,7 @@ Resources
 
 * https://github.com/voicecom/pgtool
 * https://pypi.python.org/pypi/pgtool
+* https://github.com/voicecom/pgtool/wiki/TODO
 
 Changelog
 ---------

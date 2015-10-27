@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Command-line tool for interacting with PostgreSQL databases."""
+"""Command-line tool to simplify some common maintenance tasks on PostgreSQL databases."""
 
 from __future__ import unicode_literals
 
