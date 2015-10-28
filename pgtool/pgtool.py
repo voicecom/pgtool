@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """Command-line tool to simplify some common maintenance tasks on PostgreSQL databases."""
 
 from __future__ import unicode_literals
@@ -443,7 +442,3 @@ def main(argv=None):
                 parser.print_help()
 
         sys.exit(1)
-
-
-if __name__ == '__main__':
-    main()

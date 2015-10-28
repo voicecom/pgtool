@@ -1,0 +1,6 @@
+#!/usr/bin/env python
+"""Script to directly invoke pgtool without installing anything."""
+
+from pgtool.pgtool import main
+
+main()

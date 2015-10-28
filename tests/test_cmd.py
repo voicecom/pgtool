@@ -1,14 +1,17 @@
+# -*- coding: utf-8 -*-
 """Functional tests using the command line interface"""
 
 from __future__ import unicode_literals
 
+import os
+import subprocess
 import unittest
 
 from pgtool import pgtool
 
 
 class ArgumentTest(unittest.TestCase):
-    """Test command line argument handling"""
+    """Test command line and argument handling"""
 
     def test_help(self):
         # Help is also printed using AbortWithHelp when no arguments are supplied.
@@ -37,6 +40,13 @@ class ArgumentTest(unittest.TestCase):
         parser.parse_args(['--quiet', 'kill', 'foo'])
         with self.assertRaises(SystemExit, msg="1"):
             parser.parse_args(['kill', '--quiet', 'foo'])
+
+    def test_run_script(self):
+        """Test stand-alone runner script"""
+        script_path = os.path.join(os.path.dirname(__file__), '../run')
+        null = getattr(subprocess, 'DEVNULL', None) or open(os.devnull, 'wb')
+
+        subprocess.check_call([script_path, '--help'], stdout=null)
 
 
 if __name__ == '__main__':
