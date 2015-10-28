@@ -14,6 +14,8 @@ import psycopg2.errorcodes
 # Globals
 import time
 
+from .util import pretty_size, fetch_single_row, fetch_single_val
+
 MAINT_DBNAME = 'postgres'  # FIXME: hardcoded
 APPNAME = "PGtool"
 MAX_IDENTIFIER_LEN = 63  # http://www.postgresql.org/docs/current/static/sql-syntax-lexical.html#SQL-SYNTAX-IDENTIFIERS
@@ -126,6 +128,9 @@ def pg_copy(db, src, dest):
     q_src, q_dest = quote_names(db, (src, dest))
 
     c = db.cursor()
+    size = fetch_single_val(c, "SELECT pg_database_size(%s)", [src])
+    log.info("Duplicating database %s size %s", q_src, pretty_size(size))
+
     sql = "CREATE DATABASE %s TEMPLATE %s" % (q_dest, q_src)
     log.info("SQL: %s", sql)
     try:
@@ -212,18 +217,18 @@ def pg_reindex(db, idx):
     c = db.cursor()
 
     # XXX regclass case folding is inconsistent with other PGtool commands, but we can live with it for now.
-    c.execute("""\
-    SELECT nspname, relname, pg_catalog.pg_get_indexdef(c.oid, 0, true)
+    schema, name, stmt, size = fetch_single_row(c, """\
+    SELECT nspname, relname, pg_catalog.pg_get_indexdef(c.oid, 0, true), pg_relation_size(c.oid)
     FROM pg_catalog.pg_class c
         JOIN pg_catalog.pg_namespace ns ON (c.relnamespace=ns.oid)
     WHERE c.oid=%s::pg_catalog.regclass
     """, [idx])
-    assert c.rowcount == 1  # Otherwise count==0, regclass should fail anyway
-    schema, name, stmt = c.fetchone()
 
     # TODO Generate unique tmp name or drop previous one when safe?
     tmpname = 'tmp_' + name
     q_schema, q_name, q_tmpname = quote_names(db, [schema, name, tmpname])
+
+    log.info("Recreating index %s.%s size %s", q_schema, q_name, pretty_size(size))
 
     match = re.match(pg_indexdef_re, stmt)
     assert match, "Cannot parse indexdef statement: %s" % stmt
@@ -232,6 +237,10 @@ def pg_reindex(db, idx):
         sql = "%s CONCURRENTLY %s ON %s" % (match.group(1), q_tmpname, match.group(3))
         log.info("SQL: %s", sql)
         c.execute(sql)
+
+        newsize = fetch_single_val(c, "SELECT pg_relation_size(%s::regclass)", ['%s.%s' % (q_schema, q_tmpname)])
+        log.info("New index size size %s, reduction %.1f%%. Trying to swap old index for new...",
+                 pretty_size(newsize), 100 - (100.0 * newsize) // size)
 
         pg_replace_index(db, q_schema, q_tmpname, q_name)
 
@@ -252,7 +261,6 @@ def pg_reindex(db, idx):
 
 
 def pg_replace_index(db, q_schema, q_source, q_name):
-    log.info("Temp index created, trying to swap without interrupting other queries...")
     c = db.cursor()
     timeout_var = 'lock_timeout' if db.server_version >= 90300 else 'statement_timeout'
 
