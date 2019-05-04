@@ -9,6 +9,7 @@ from argparse import ArgumentParser
 
 import psycopg2
 import psycopg2.errorcodes
+import psycopg2.extensions
 
 # Globals
 import time
@@ -93,7 +94,7 @@ def terminate(db, databases):
             count += 1
 
     if count:
-        log.warn("Killed %d connection(s)", count)
+        log.warning("Killed %d connection(s)", count)
     return count
 
 
@@ -249,7 +250,7 @@ def pg_reindex(db, idx):
         if getattr(err, 'pgcode', None) not in (psycopg2.errorcodes.DUPLICATE_TABLE,
                                                 psycopg2.errorcodes.UNIQUE_VIOLATION):
             if isinstance(err, KeyboardInterrupt):
-                log.warn("Interrupted, dropping temporary index...")
+                log.warning("Interrupted, dropping temporary index...")
             # XXX Why is this necessary? pg_replace_index's ROLLBACK doesn't do the job when ^C'ing the inner DROP INDEX
             # during contention.
             execute_catch(c, "ROLLBACK")
@@ -431,7 +432,7 @@ def main(argv=None):
             raise
 
         if isinstance(err, KeyboardInterrupt):
-            log.warn("Interrupted")
+            log.warning("Interrupted")
         elif isinstance(err, psycopg2.Error):
             log.fatal(("PostgreSQL: %s" % err).strip())
             if getattr(err, 'pgcode', None):
