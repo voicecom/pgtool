@@ -1,20 +1,22 @@
 sudo: false
 language: python
+dist: xenial
 # addons.postgresql section: does not support multiple values :(
 addons:
-    postgresql: "9.3"
+  postgresql: 9.6
+# Versions are deliberately out of order to get a diverse sample first
 python:
-    - "2.7"
-    - "3.3"
-    - "3.4"
-    - "3.5"
-    # - "pypy"  # FIXME broken with PyPy, need to use psycopg2ct?
+  - 3.7
+  - 2.7
+  - 3.5
+  - 3.6
+  # - "pypy"  # FIXME broken with PyPy, need to use psycopg2ct?
 cache:
-    directories:
-        - $PWD/wheelhouse  # cache the dependencies
+  directories:
+    - $PWD/wheelhouse  # cache the dependencies
 env:
-    global:
-        - export PIP_FIND_LINKS=$PWD/wheelhouse
+  global:
+    - export PIP_FIND_LINKS=$PWD/wheelhouse
 install:
   - pip wheel -r requirements.txt
   - pip install -r requirements.txt
