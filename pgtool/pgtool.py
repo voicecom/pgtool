@@ -35,7 +35,7 @@ class AbortWithHelp(Abort):
     pass
 
 
-def connect(database=MAINT_DBNAME, async=False):
+def connect(database=MAINT_DBNAME, _async=False):
     appname = APPNAME
     if args and args.cmd:
         appname += " " + args.cmd
@@ -48,8 +48,8 @@ def connect(database=MAINT_DBNAME, async=False):
         pg_args['host'] = args.host
     if args.port is not None:
         pg_args['port'] = args.port
-    if async:
-        pg_args['async'] = async
+    if _async:
+        pg_args['async'] = _async
 
     db = psycopg2.connect(**pg_args)
     # psycopg2 returns only unicode strings
